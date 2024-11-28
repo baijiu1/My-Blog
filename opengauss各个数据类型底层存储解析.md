@@ -87,6 +87,37 @@ liu:6c69 75
 ### date
 typedef int32 DateADT;
 PostgreSQL按照儒略日(Julian day,JD)，即公元前4713年1月1日作为起始
+下面是计算方法：
+
+
+int date2j(int y, int m, int d)
+{
+    int julian;
+    int century;
+
+    if (m > 2) {
+        m += 1;
+        y += 4800;
+    } else {
+        m += 13;
+        y += 4799;
+    }
+
+    century = y / 100;
+    julian = y * 365 - 32167;
+    julian += y / 4 - century + century / 4;
+    julian += 7834 * m / 256 + d;
+
+    return julian  - POSTGRES_EPOCH_JDATE;
+} /* date2j() */
+
+#define POSTGRES_EPOCH_JDATE 2451545 /* == date2j(2000, 1, 1) */
+
+比如：2012-12-08，通过date2j，最后计算得出4725，转换成16进制就是1275，到文件存储里就是：
+
+00001fe0: 0300 0000 0000 0000 0000 0000 0000 0000  ................
+00001ff0: 0100 0100 0008 1800 7512 0000 0000 0000  ........u.......
+00002000: 0a                                       .
 
 
 ### time & time with time zone
@@ -101,6 +132,10 @@ typedef struct
 	TimeADT		time;			/* all time units other than months and years */
 	int32		zone;			/* numeric time zone, in seconds */
 } TimeTzADT;
+
+最终格式：
+
+result->time = ((tm->tm_hour * MINS_PER_HOUR + tm->tm_min) * SECS_PER_MINUTE) + tm->tm_sec + fsec;
 
 
 
