@@ -133,9 +133,106 @@ typedef struct
 	int32		zone;			/* numeric time zone, in seconds */
 } TimeTzADT;
 
-最终格式：
+按照以下计算方式来计算最终存储结果：
+```c++
+#define USECS_PER_SEC	INT64CONST(1000000)
+#define MINS_PER_HOUR	60
+#define SECS_PER_MINUTE 60
 
 result->time = ((tm->tm_hour * MINS_PER_HOUR + tm->tm_min) * SECS_PER_MINUTE) + tm->tm_sec + fsec;
+```
+
+举例，插入time类型：12:13:14.048476，文件中的格式为：
+
+```bash
+00001fe0: f802 0000 0000 0000 0000 0000 0000 0000  ................
+00001ff0: 0100 0100 0008 1800 dce7 3f3e 0a00 0000  ..........?>....
+00002000: 0a
+```
+
+计算：((((12 * 60 + 13) * 60) + 14) * 1000000LL ) + 48476 = 1044375516;
+转换16进制为：3e3f e7dc，转换成大端序：dce7 3f3e
+
+timez类型：
+
+依然也是按照上述计算方式，最后计算出的结果是54977187384，转换16进制就是：0ccce54e38，看下文件里怎么存储的。+8表示为：0xFFFF8F80：
+
+```bash
+00001fd0: 0000 0000 0000 0000 fa02 0000 0000 0000  ................
+00001fe0: 0000 0000 0000 0000 0100 0100 0009 1800  ................
+00001ff0: 384e e5cc 0c00 0000 808f ffff 0000 0000  8N..............
+00002000: 0a                                       .
+```
+
+### timestamp 和 timestamp with time zone
+源码位于：src/backend/utils/adt/timestamp.c
+
+先看下定义：
+
+```c++
+typedef int64 Timestamp;
+typedef int64 TimestampTz;
+```
+
+入口函数： timestamp_in
+
+```c++
+date = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday) - POSTGRES_EPOCH_JDATE;
+time = time2t(tm->tm_hour, tm->tm_min, tm->tm_sec, fsec);
+
+*result = date * USECS_PER_DAY + time;
+```
+
+##### timestamp
+
+```sql
+test=# create table timesandtimestz(t1 timestamp(6));
+CREATE TABLE
+test=# insert into timesandtimestz values ('2024-12-01 15:38:25.192837');
+INSERT 0 1
+```
+
+```bash
+00001fe0: fc02 0000 0000 0000 0000 0000 0000 0000  ................
+00001ff0: 0100 0100 0008 1800 85ef ccfd 35cb 0200  ............5...
+00002000: 0a                                       .
+```
+
+根据上面公式，计算出结果为：786382705192837，转换为： 2cb35fdccef85
+
+##### timestamptz
+
+```sql
+test=# create table timesandtimestzz(t2 timestamptz(6));
+CREATE TABLE
+test=# insert into timesandtimestzz values ('2024-12-01 15:38:25.192837 +8:00:00');
+INSERT 0 1
+```
+
+```bash
+00001fe0: ff02 0000 0000 0000 0000 0000 0000 0000  ................
+00001ff0: 0100 0100 0008 1800 85cf 2f49 2fcb 0200  ........../I/...
+00002000: 0a                                       .
+```
+带时区的话，会多出一个计算公式：
+
+```c++
+*result = dt2local(*result, -(*tzp)); // 参数里的result就是timestamp计算出的值 tzp就是时区
+static Timestamp
+dt2local(Timestamp dt, int timezone)
+{
+	dt -= (timezone * USECS_PER_SEC);
+	return dt;
+}
+```
+
++8:00:00转换秒，会被计算为：-28800，最后根据上面dt2local函数计算出来的结果为：786353905192837，转换16进制就是：2cb2f492fcf85
+
+
+##### interval
+
+
+
 
 
 
