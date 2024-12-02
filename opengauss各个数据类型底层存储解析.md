@@ -14,7 +14,110 @@
 
 ### numeric
 
-占位，现在还没弄懂
+
+numeric_in()，函数入口，在src/backend/utils/adt/numeric.c，635行
+
+如果判断为十进制的numric，那么走set_var_from_str函数
+
+```c++
+#define NUMERIC_SIGN_MASK	0xC000
+#define NUMERIC_POS			0x0000
+#define NUMERIC_NEG			0x4000
+#define NUMERIC_SHORT		0x8000
+#define NUMERIC_SPECIAL		0xC000
+if (dweight >= 0)
+    // 如果传入的值带小数点，weight算法是这么算的
+    weight = (dweight + 1 + DEC_DIGITS - 1) / DEC_DIGITS - 1;
+else
+    weight = -((-dweight - 1) / DEC_DIGITS + 1);
+
+offset = (weight + 1) * DEC_DIGITS - (dweight + 1);
+ndigits = (ddigits + offset + DEC_DIGITS - 1) / DEC_DIGITS; // ddigits：跳过了第一个元组，剩余的位数。ndigits：数组元素的个数
+sign是符号位，正数用NUMERIC_POS，负数用NUMERIC_NEG
+dscale是小数部分的个数，代码部分：
+if (isdigit((unsigned char) *cp))
+{
+	decdigits[i++] = *cp++ - '0';
+	if (!have_dp)
+		dweight++;
+	else
+		dscale++;
+}
+
+// n_header的计算方式
+#define NUMERIC_SHORT_SIGN_MASK			0x2000
+#define NUMERIC_SHORT_DSCALE_MASK		0x1F80
+#define NUMERIC_SHORT_DSCALE_SHIFT		7
+#define NUMERIC_SHORT_DSCALE_MAX		\
+	(NUMERIC_SHORT_DSCALE_MASK >> NUMERIC_SHORT_DSCALE_SHIFT)
+#define NUMERIC_SHORT_WEIGHT_SIGN_MASK	0x0040
+#define NUMERIC_SHORT_WEIGHT_MASK		0x003F
+#define NUMERIC_SHORT_WEIGHT_MAX		NUMERIC_SHORT_WEIGHT_MASK
+#define NUMERIC_SHORT_WEIGHT_MIN		(-(NUMERIC_SHORT_WEIGHT_MASK+1))
+#define SET_VARSIZE(PTR, len)				SET_VARSIZE_4B(PTR, len)
+#define SET_VARSIZE_SHORT(PTR, len)			SET_VARSIZE_1B(PTR, len)
+#define SET_VARSIZE_COMPRESSED(PTR, len)	SET_VARSIZE_4B_C(PTR, len)
+
+#define SET_VARSIZE_4B(PTR,len) \
+	(((varattrib_4b *) (PTR))->va_4byte.va_header = (((uint32) (len)) << 2))
+#define SET_VARSIZE_4B_C(PTR,len) \
+	(((varattrib_4b *) (PTR))->va_4byte.va_header = (((uint32) (len)) << 2) | 0x02)
+#define SET_VARSIZE_1B(PTR,len) \
+	(((varattrib_1b *) (PTR))->va_header = (((uint8) (len)) << 1) | 0x01)
+#define SET_VARTAG_1B_E(PTR,tag) \
+	(((varattrib_1b_e *) (PTR))->va_header = 0x01, \
+	 ((varattrib_1b_e *) (PTR))->va_tag = (tag))
+
+typedef union
+{
+	struct						/* Normal varlena (4-byte length) */
+	{
+		uint32		va_header;
+		char		va_data[FLEXIBLE_ARRAY_MEMBER];
+	}			va_4byte;
+	struct						/* Compressed-in-line format */
+	{
+		uint32		va_header;
+		uint32		va_tcinfo;	/* Original data size (excludes header) and
+								 * compression method; see va_extinfo */
+		char		va_data[FLEXIBLE_ARRAY_MEMBER]; /* Compressed data */
+	}			va_compressed;
+} varattrib_4b;
+
+#define NUMERIC_CAN_BE_SHORT(scale,weight) \
+	((scale) <= NUMERIC_SHORT_DSCALE_MAX && \
+	(weight) <= NUMERIC_SHORT_WEIGHT_MAX && \
+	(weight) >= NUMERIC_SHORT_WEIGHT_MIN)
+
+// 等价替换： (-(0x003F+1)) = -64; 0x00FF = 255; 0x003F = 65;
+( (scale) <= 0x00FF && (weight) <= 0x003F && (weight) >= -64 )
+
+if (NUMERIC_CAN_BE_SHORT(var->dscale, weight))
+{
+	// 长度计算，整个numric的存储长度
+	len = NUMERIC_HDRSZ_SHORT + n * sizeof(NumericDigit);
+	result = (Numeric) palloc(len);
+	// SET_VARSIZE： ( ((varattrib_4b *) (PTR))->va_4byte.va_header = (((uint32) (len)) << 2))
+	SET_VARSIZE(result, len);
+	result->choice.n_short.n_header =
+		// sign如果为正数则定义为NUMERIC_POS，负数定义为NUMERIC_ENG
+		// 如果为正数，那sign为0x8000，如果为负数，那sign为(NUMERIC_SHORT | NUMERIC_SHORT_SIGN_MASK) = 0xA000，十进制为40960
+		(sign == NUMERIC_NEG ? (NUMERIC_SHORT | NUMERIC_SHORT_SIGN_MASK)
+		 : NUMERIC_SHORT)
+		| (var->dscale << NUMERIC_SHORT_DSCALE_SHIFT)
+		| (weight < 0 ? NUMERIC_SHORT_WEIGHT_SIGN_MASK : 0)
+		| (weight & NUMERIC_SHORT_WEIGHT_MASK);
+}
+else
+{
+	len = NUMERIC_HDRSZ + n * sizeof(NumericDigit);
+	result = (Numeric) palloc(len);
+	SET_VARSIZE(result, len);
+	result->choice.n_long.n_sign_dscale =
+		sign | (var->dscale & NUMERIC_DSCALE_MASK);
+	result->choice.n_long.n_weight = weight;
+}
+```
 
 ### float4
 
@@ -232,7 +335,59 @@ dt2local(Timestamp dt, int timezone)
 ##### interval
 
 
+后续再研究
 
+
+
+### 对象标识符类型 
+
+oid类型
+
+```sql
+test=# create table oidt(o1 oid);
+CREATE TABLE
+test=# insert into oidt values(100);
+INSERT 0 1
+```
+
+```c++
+typedef unsigned int Oid;
+```
+
+```bash
+00001fe0: 0103 0000 0000 0000 0000 0000 0000 0000  ................
+00001ff0: 0100 0100 0008 1800 6400 0000 0000 0000  ........d.......
+00002000: 0a                                       .
+```
+100转换16进制为： 64，占四个字节
+
+
+### 布尔型 
+bool：基础类型，占位1字节。以0、1来表示false, true。 
+
+```sql
+test=# create table boolt(b1 bool);
+CREATE TABLE
+test=# insert into boolt values ('1');
+INSERT 0 1
+test=# insert into boolt values ('0');
+INSERT 0 1
+```
+
+```bash
+00001fc0: 0403 0000 0000 0000 0000 0000 0000 0000  ................
+00001fd0: 0200 0100 0008 1800 0000 0000 0000 0000  ................
+00001fe0: 0303 0000 0000 0000 0000 0000 0000 0000  ................
+00001ff0: 0100 0100 0008 1800 0100 0000 0000 0000  ................
+00002000: 0a                                       .                                     .
+```
+01为true，00为false，由于pg是默认8字节对齐，所以后面补齐了7字节
+
+### 二进制类型 
+
+```c++
+typedef struct varlena bytea;
+```
 
 
 
