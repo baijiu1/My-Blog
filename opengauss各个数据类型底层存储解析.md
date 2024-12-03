@@ -134,6 +134,7 @@ typedef struct
 #define SET_VARSIZE_1B(PTR,len) \
 	(((varattrib_1b *) (PTR))->va_header = (((uint8) (len)) << 1) | 0x01)
 
+// 代码位于src/backend/access/common/heaptuple.c 352行
 else if (VARLENA_ATT_IS_PACKABLE(att) &&
 	VARATT_CAN_MAKE_SHORT(val))
 {
