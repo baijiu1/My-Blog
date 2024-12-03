@@ -117,6 +117,39 @@ else
 		sign | (var->dscale & NUMERIC_DSCALE_MASK);
 	result->choice.n_long.n_weight = weight;
 }
+
+// 头部字节的计算方式
+// 计算出来len之后SET_VARSIZE(result, len);计算出来vl_len_的值
+#define VARATT_CONVERTED_SHORT_SIZE(PTR) \
+	(VARSIZE(PTR) - VARHDRSZ + VARHDRSZ_SHORT)
+#define VARHDRSZ_SHORT			offsetof(varattrib_1b, va_data)
+#define VARSIZE(PTR) ((((varattrib_4b *) (PTR))->va_4byte.va_header >> 2) & 0x3FFFFFFF)
+#define VARHDRSZ ((int32) sizeof(int32))
+typedef struct
+{
+	uint8		va_header;
+	char		va_data[FLEXIBLE_ARRAY_MEMBER]; /* Data begins here */
+} varattrib_1b;
+#define SET_VARSIZE_SHORT(PTR, len)			SET_VARSIZE_1B(PTR, len)
+#define SET_VARSIZE_1B(PTR,len) \
+	(((varattrib_1b *) (PTR))->va_header = (((uint8) (len)) << 1) | 0x01)
+
+else if (VARLENA_ATT_IS_PACKABLE(att) &&
+	VARATT_CAN_MAKE_SHORT(val))
+{
+	/* convert to short varlena -- no alignment */
+	data_length = VARATT_CONVERTED_SHORT_SIZE(val);
+	SET_VARSIZE_SHORT(data, data_length);
+	memcpy(data + 1, VARDATA(val), data_length - 1);
+}
+
+// VARATT_CONVERTED_SHORT_SIZE的计算方式
+((((varattrib_4b *) (PTR))->va_4byte.va_header >> 2) & 0x3FFFFFFF) - ((int32) sizeof(int32)) + offsetof(varattrib_1b, va_data) = 9
+// (( (48) >> 2) & 0x3FFFFFFF) - ((int32) sizeof(int32)) + 1 = 9
+
+// 得出头部字节的结果
+SET_VARSIZE_SHORT(data, data_length);
+(((varattrib_1b *) (data))->va_header = (((uint8) (9)) << 1) | 0x01) = 13
 ```
 
 ### float4
