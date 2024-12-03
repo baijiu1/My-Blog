@@ -210,8 +210,32 @@ SET_VARSIZE_SHORT(data, data_length);
 
      现在让我们按照IEEE浮点数表示法，一步步的将float型浮点数12345转换为十六进制代码。首先数字是正整数，所以符号位为0，接下来12345的二进制表示为11000000111001，小数点向左移，一直移到离最高位只有1位，就是最高位的1。即1.1000000111001*2^13，所有的二进制数字最前边都有一个1，所以可以去掉，那么尾数位的精确度其实可以为24 bit。再来看指数位，因为是有8 bit，所以只为能够表示的为0~255，也可以说是-128~127，所以指数为为正的话，必须加上127，即13+127=140，即10001100。好了，所有的数据都整理好了，现在表示12345的float存储方式即01000110010000001110010000000000，现在把它转化为16进制，即4640 e400，而存储文件是从下向上写入的，所以表示为 e400 4640。
      整数部分弄懂了，小数部分先跳过
-### double
 
+代码位于：arc/backend/utils/adt/float.c 函数入口：float4in
+
+```c++
+#define PG_RETURN_FLOAT4(x)  return Float4GetDatum(x)
+static inline Datum
+Float4GetDatum(float4 X)
+{
+	union
+	{
+		float4		value;
+		int32		retval;
+	}			myunion;
+
+	myunion.value = X;
+	return Int32GetDatum(myunion.retval);
+}
+
+```
+
+
+### double
+```c++
+#define PG_RETURN_FLOAT8(x)  return Float8GetDatum(x)
+
+```
 
 
 # 变长类型
