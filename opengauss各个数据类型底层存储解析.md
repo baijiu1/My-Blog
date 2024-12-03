@@ -153,6 +153,54 @@ SET_VARSIZE_SHORT(data, data_length);
 (((varattrib_1b *) (data))->va_header = (((uint8) (9)) << 1) | 0x01) = 13
 ```
 
+##### 举例：
+插入一个小数：12323424.567，会得到以下结果：
+dweight: 7  小数点前的位数，初始值为-1，所以会少一位
+DEC_DIGITS: 4 宏定义，默认为4
+weight: 1    表示的是整数部分所占用的数组元素个数
+offset: 0   第一个元组要补零的个数。102323424.567中，offset值是3，因为按照4位元组存储，为：0001 0232 3424，前面要补3个0
+ddigits: 11
+ndigits: 3 指的digits数组元素的个数
+
+weight表示的是整数部分所占用的数组元素个数，不过进行了一系列的运算，在保证有整数部分， weight = （整数部分个数 + 4 - 1）/4 - 1
+weight = (dweight + 1 + DEC_DIGITS - 1) / DEC_DIGITS - 1; // (7 + 1 + 4 - 1) / 4 - 1
+( (3) <= 0x00FF && (1) <= 0x003F && (1) >= -64 )
+下面是物理存储结构：
+
+```bash
+00001fd0: 0000 0000 0000 0000 0603 0000 0000 0000  ................
+00001fe0: 0000 0000 0000 0000 0100 0100 0208 1800  ................
+00001ff0: 1381 81d0 0460 0d26 1600 0000 0000 0000  .....`.&........
+00002000: 0a  
+```
+
+解析物理文件内容过程：
+转换成16进制：1232 3424 5670
+	   04d0 0d60 1626
+计算n_header：
+0x8000 | (3 << 7) | (0) | (1 & 0x003F) = 0x8181
+
+计算头一个字节的值：
+```c++
+#define VARATT_CONVERTED_SHORT_SIZE(PTR) \
+	(VARSIZE(PTR) - VARHDRSZ + VARHDRSZ_SHORT)
+#define VARHDRSZ_SHORT			offsetof(varattrib_1b, va_data)
+#define VARSIZE(PTR) ((((varattrib_4b *) (PTR))->va_4byte.va_header >> 2) & 0x3FFFFFFF)
+#define VARHDRSZ ((int32) sizeof(int32))
+typedef struct
+{
+	uint8		va_header;
+	char		va_data[FLEXIBLE_ARRAY_MEMBER]; /* Data begins here */
+} varattrib_1b;
+((((varattrib_4b *) (PTR))->va_4byte.va_header >> 2) & 0x3FFFFFFF) - ((int32) sizeof(int32)) + offsetof(varattrib_1b, va_data) = 9
+val 48 len:9 data:13
+(( (48) >> 2) & 0x3FFFFFFF) - ((int32) sizeof(int32)) + 1 = 9
+
+SET_VARSIZE_SHORT(data, data_length);
+(((varattrib_1b *) (data))->va_header = (((uint8) (9)) << 1) | 0x01) = 13
+```
+
+
 ### float4
 
      现在让我们按照IEEE浮点数表示法，一步步的将float型浮点数12345转换为十六进制代码。首先数字是正整数，所以符号位为0，接下来12345的二进制表示为11000000111001，小数点向左移，一直移到离最高位只有1位，就是最高位的1。即1.1000000111001*2^13，所有的二进制数字最前边都有一个1，所以可以去掉，那么尾数位的精确度其实可以为24 bit。再来看指数位，因为是有8 bit，所以只为能够表示的为0~255，也可以说是-128~127，所以指数为为正的话，必须加上127，即13+127=140，即10001100。好了，所有的数据都整理好了，现在表示12345的float存储方式即01000110010000001110010000000000，现在把它转化为16进制，即4640 e400，而存储文件是从下向上写入的，所以表示为 e400 4640。
