@@ -181,11 +181,12 @@ struct varlena
 第一个字节的最高位等于1，然后字节不等于1000 0000，那么就是varattrib_1b，用来存储小数据
 第一个字节的最高位等于0，那么就是varattrib_4b，可以存储不超过1GB的数据
 
+```bash
 00001fc0: 0000 0000 0000 0000 1300 0000 0000 0000  ................
 00001fd0: 0000 0000 0000 0000 0100 0200 0209 1800  ................
 00001fe0: 0100 0000 2f56 6172 6961 626c 652d 6c65  ..../Variable-le
 00001ff0: 6e67 7468 2073 7472 696e 6700 0000 0000  ngth string.....
-
+```
 
 从2f开始，把2f转换成二进制为：101111
 最低一位标识类型，这里是varattrib_1b，高7位是长度，那么就是10111，转换十进制是23，也就是总长度23:
@@ -201,7 +202,7 @@ typedef struct nameData
 typedef NameData *Name;
 #define NAMEDATALEN 64;
 
-
+```bash
 00001f60: 0000 0000 0000 0000 0300 0000 0000 0000  ................
 00001f70: 0000 0000 0000 0000 0100 0100 0008 1800  ................
 00001f80: 6c69 7500 0000 0000 0000 0000 0000 0000  liu.............
@@ -213,7 +214,7 @@ typedef NameData *Name;
 00001fe0: 0000 0000 0000 0000 0000 0000 0000 0000  ................
 00001ff0: 0000 0000 0000 0000 0000 0000 0000 0000  ................
 00002000: 0a                 .
-
+```
 
 
 liu:6c69 75
@@ -226,7 +227,7 @@ typedef int32 DateADT;
 PostgreSQL按照儒略日(Julian day,JD)，即公元前4713年1月1日作为起始
 下面是计算方法：
 
-
+```c++
 int date2j(int y, int m, int d)
 {
     int julian;
@@ -249,15 +250,20 @@ int date2j(int y, int m, int d)
 } /* date2j() */
 
 #define POSTGRES_EPOCH_JDATE 2451545 /* == date2j(2000, 1, 1) */
+```
 
 比如：2012-12-08，通过date2j，最后计算得出4725，转换成16进制就是1275，到文件存储里就是：
 
+```bash
 00001fe0: 0300 0000 0000 0000 0000 0000 0000 0000  ................
 00001ff0: 0100 0100 0008 1800 7512 0000 0000 0000  ........u.......
 00002000: 0a                                       .
+```
 
 
 ### time & time with time zone
+
+```c++
 #ifdef HAVE_INT64_TIMESTAMP
 typedef int64 TimeADT;
 #else
@@ -269,8 +275,10 @@ typedef struct
 	TimeADT		time;			/* all time units other than months and years */
 	int32		zone;			/* numeric time zone, in seconds */
 } TimeTzADT;
+```
 
 按照以下计算方式来计算最终存储结果：
+
 ```c++
 #define USECS_PER_SEC	INT64CONST(1000000)
 #define MINS_PER_HOUR	60
