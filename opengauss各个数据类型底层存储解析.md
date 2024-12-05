@@ -31,7 +31,7 @@ if (dweight >= 0)
 else
     weight = -((-dweight - 1) / DEC_DIGITS + 1);
 
-offset = (weight + 1) * DEC_DIGITS - (dweight + 1);
+offset = (weight + 1) * DEC_DIGITS - (dweight + 1); // 第一个元组前面补零的个数
 ndigits = (ddigits + offset + DEC_DIGITS - 1) / DEC_DIGITS; // ddigits：跳过了第一个元组，剩余的位数。ndigits：数组元素的个数
 sign是符号位，正数用NUMERIC_POS，负数用NUMERIC_NEG
 dscale是小数部分的个数，代码部分：
