@@ -268,11 +268,35 @@ std::cout << std::setprecision(15) << value << std::endl;
 这些（这些类型都是varchar的马甲）是同一种类型，使用的是相同的输入输出函数。
 
 ```c++
-struct varlena
+typedef union
 {
-	char		vl_len_[4];		/* Do not touch this field directly! */
-	char		vl_dat[FLEXIBLE_ARRAY_MEMBER];	/* Data content is here */
-};
+	struct						/* Normal varlena (4-byte length) */
+	{
+		uint32		va_header;
+		char		va_data[FLEXIBLE_ARRAY_MEMBER];
+	}			va_4byte;
+	struct						/* Compressed-in-line format */
+	{
+		uint32		va_header;
+		uint32		va_tcinfo;	/* Original data size (excludes header) and
+								 * compression method; see va_extinfo */
+		char		va_data[FLEXIBLE_ARRAY_MEMBER]; /* Compressed data */
+	}			va_compressed;
+} varattrib_4b;
+
+typedef struct
+{
+	uint8		va_header;
+	char		va_data[FLEXIBLE_ARRAY_MEMBER]; /* Data begins here */
+} varattrib_1b;
+
+/* TOAST pointers are a subset of varattrib_1b with an identifying tag byte */
+typedef struct
+{
+	uint8		va_header;		/* Always 0x80 or 0x01 */
+	uint8		va_tag;			/* Type of datum */
+	char		va_data[FLEXIBLE_ARRAY_MEMBER]; /* Type-specific data */
+} varattrib_1b_e;
 ```
 
 
@@ -291,6 +315,7 @@ struct varlena
 
 从2f开始，把2f转换成二进制为：101111
 最低一位标识类型，这里是varattrib_1b，高7位是长度，那么就是10111，转换十进制是23，也就是总长度23:
+varattrib_1b类型只是用于存储长度不超过127 byte 的小数据
 
 ```bash
 2f56 6172 6961 626c 652d 6c65 6e67 7468 2073 7472 696e 67
