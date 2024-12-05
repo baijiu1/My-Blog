@@ -251,7 +251,7 @@ pg中是按照标准 IEEE 754 浮点数格式来存储的。
 
 ```c++
 double value = 19425.239482;
-std::cout << std::setprecision(50) << value << std::endl;
+std::cout << std::setprecision(15) << value << std::endl;
 ```
 2、将计算出来的数值转换为二进制
 3、根据SEM分别计算，最后转换为16进制
