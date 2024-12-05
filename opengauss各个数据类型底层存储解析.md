@@ -266,13 +266,14 @@ std::cout << std::setprecision(15) << value << std::endl;
 这些（这些类型都是bpchar的马甲）是同一种类型，使用的是同一个输入输出函数。 
 ### character(n) 、varchar、varchar(n)、character varying(n)
 这些（这些类型都是varchar的马甲）是同一种类型，使用的是相同的输入输出函数。
-  
+
+```c++
 struct varlena
 {
 	char		vl_len_[4];		/* Do not touch this field directly! */
 	char		vl_dat[FLEXIBLE_ARRAY_MEMBER];	/* Data content is here */
 };
-
+```
 
 
 注意这是通用格式，varlena还分为很多种格式，每种格式的定义都不相同。我们在使用之前，需要根据它的第一个字节，转换为它对应格式：
@@ -290,17 +291,24 @@ struct varlena
 
 从2f开始，把2f转换成二进制为：101111
 最低一位标识类型，这里是varattrib_1b，高7位是长度，那么就是10111，转换十进制是23，也就是总长度23:
+
+```bash
 2f56 6172 6961 626c 652d 6c65 6e67 7468 2073 7472 696e 67
+```
+
 正好对应到了字符串
 
 
 ### name类型：
+
+```c++
 typedef struct nameData
 {
 	char		data[NAMEDATALEN];
 } NameData;
 typedef NameData *Name;
 #define NAMEDATALEN 64;
+```
 
 ```bash
 00001f60: 0000 0000 0000 0000 0300 0000 0000 0000  ................
@@ -316,8 +324,7 @@ typedef NameData *Name;
 00002000: 0a                 .
 ```
 
-
-liu:6c69 75
+liu转换为16进制:6c69 75
 
 # 日期类型
 <img width="1001" alt="image" src="https://github.com/user-attachments/assets/c14d817f-69c8-4904-93ea-e374b76a1652">
@@ -530,6 +537,8 @@ INSERT 0 1
 ```c++
 typedef struct varlena bytea;
 ```
+
+实际上也是varlena类型，这部分在《变长类型》部分有讲解
 
 
 
