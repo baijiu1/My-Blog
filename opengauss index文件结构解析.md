@@ -1,4 +1,9 @@
 
+### 总体结构
+
+<img width="855" alt="image" src="https://github.com/user-attachments/assets/4884ad0d-e186-4aca-853d-c64bb0c781ac">
+
+
 ```sql
 #查看meta块
 select * from bt_metap('tab1_pkey');
@@ -125,8 +130,6 @@ bt_page_stats
 	...
 
 ```
-
-
 
 
 ```bash
