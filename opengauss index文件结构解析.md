@@ -437,6 +437,14 @@ test=# select * from bt_page_stats('t_idx_3_pkey', 3);
      3 | i    |        286 |          0 |            15 |      8192 |      2436 |         0 |       419 |          1 |          0
 (1 row)
 
+-- 查看第三页branch page的内容，data里同样存储了77 97 01 00 00 00 00 00，下一页branch page的最大值
+test=# select * from bt_page_items('t_idx_3_pkey', 3);
+ itemoffset |  ctid   | itemlen | nulls | vars |          data           | dead | htid | tids 
+------------+---------+---------+-------+------+-------------------------+------+------+------
+          1 | (295,1) |      16 | f     | f    | 77 97 01 00 00 00 00 00 |      |      | 
+          2 | (2,0)   |       8 | f     | f    |                         |      |      | 
+          3 | (11,1)  |      16 | f     | f    | 6f 01 00 00 00 00 00 00 |      |      | 
+
 test=# select * from bt_page_stats('t_idx_3_pkey', 419);
  blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo_level | btpo_flags 
 -------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------------+------------
@@ -455,23 +463,12 @@ test=# select * from bt_page_items('t_idx_3_pkey', 419);
           4 | (297,1) |      16 | f     | f    | 53 9a 01 00 00 00 00 00 |      |      | 
 
 -- 查看branch page所指向的leaf page的状态
--- btpo_level = 0说明是最底层，btpo_flags说明是一个leaf page
+-- btpo_level = 0说明是最底层，btpo_flags = 1说明是一个leaf page
 test=# select * from bt_page_stats('t_idx_3_pkey', 582);
  blkno | type | live_items | dead_items | avg_item_size | page_size | free_size | btpo_prev | btpo_next | btpo_level | btpo_flags 
 -------+------+------------+------------+---------------+-----------+-----------+-----------+-----------+------------+------------
    582 | l    |        367 |          0 |            16 |      8192 |       808 |       581 |       583 |          0 |          1
 (1 row)
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -489,6 +486,22 @@ test=# select * from bt_page_stats('t_idx_3_pkey', 5);
 (1 row)
 
 ```
+
+
+总的来说，2层结构和1层结构一样，中间多了一层branch page层，同样的：
+1. branch page中记录了下一页的起始值
+2. branch page中的ctid指向了下一层leaf page的块号
+3. leaf page的ctid指向了表数据文件的块号和块内元组索引序号
+
+
+
+
+
+## 多层结构
+
+除了meta page，还可能包含多层branch page，以及一层leaf page。
+
+![image](https://github.com/user-attachments/assets/fa0530cf-89f9-4d2a-870b-0cb7a2b2ce57)
 
 
 
