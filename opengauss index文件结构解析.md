@@ -395,6 +395,9 @@ test=# select * from bt_page_items('idx_2',29);
 ![image](https://github.com/user-attachments/assets/5180fe80-653e-4a32-bd25-9cf38e5c095e)
 
 
+<img width="825" alt="image" src="https://github.com/user-attachments/assets/fdefadd3-c4fc-46f0-b10f-0ff4f783b18d" />
+
+
 
 ```sql
 test=# select * from bt_metap('t_idx_3_pkey');
