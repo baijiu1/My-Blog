@@ -1,4 +1,7 @@
 
+<img width="394" alt="image" src="https://github.com/user-attachments/assets/1a2507ed-2be5-4e55-b533-89cefcfe866b" />
+
+
 ## base/16384解析
 
 如何从base/16384找到pg_class和pg_attribute表的oid和filenode？
