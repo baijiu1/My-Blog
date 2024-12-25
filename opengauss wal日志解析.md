@@ -1,4 +1,7 @@
 
+<img width="739" alt="image" src="https://github.com/user-attachments/assets/0bf79639-d13f-43fc-bc06-2b4f7389582d" />
+
+
 ```c++
 typedef struct XLogPageHeaderData
 {
