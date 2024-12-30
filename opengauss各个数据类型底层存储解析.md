@@ -155,16 +155,20 @@ SET_VARSIZE_SHORT(data, data_length);
 
 ##### 举例：
 插入一个小数：12323424.567，会得到以下结果：
+```bash
 dweight: 7  小数点前的位数，初始值为-1，所以会少一位
 DEC_DIGITS: 4 宏定义，默认为4
 weight: 1    表示的是整数部分所占用的数组元素个数
 offset: 0   第一个元组要补零的个数。102323424.567中，offset值是3，因为按照4位元组存储，为：0001 0232 3424，前面要补3个0
 ddigits: 11
 ndigits: 3 指的digits数组元素的个数
-
+```
+```bash
 weight表示的是整数部分所占用的数组元素个数，不过进行了一系列的运算，在保证有整数部分， weight = （整数部分个数 + 4 - 1）/4 - 1
 weight = (dweight + 1 + DEC_DIGITS - 1) / DEC_DIGITS - 1; // (7 + 1 + 4 - 1) / 4 - 1
 ( (3) <= 0x00FF && (1) <= 0x003F && (1) >= -64 )
+```
+
 下面是物理存储结构：
 
 ```bash
@@ -183,9 +187,12 @@ weight = (dweight + 1 + DEC_DIGITS - 1) / DEC_DIGITS - 1; // (7 + 1 + 4 - 1) / 4
 ```
 
 计算n_header：
+```bash
 0x8000 | (3 << 7) | (0) | (1 & 0x003F) = 0x8181
+```
 
 计算头一个字节的值：
+
 ```c++
 #define VARATT_CONVERTED_SHORT_SIZE(PTR) \
 	(VARSIZE(PTR) - VARHDRSZ + VARHDRSZ_SHORT)
