@@ -91,13 +91,33 @@ typedef union
 
 // 等价替换： (-(0x003F+1)) = -64; 0x00FF = 255; 0x003F = 65;
 ( (scale) <= 0x00FF && (weight) <= 0x003F && (weight) >= -64 )
+n = var->ndigits;
+/* truncate leading zeroes */
+while (n > 0 && *digits == 0)
+{
+	digits++;
+	weight--;
+	n--;
+}
+/* truncate trailing zeroes */
+while (n > 0 && digits[n - 1] == 0)
+	n--;
 
+/* If zero result, force to weight=0 and positive sign */
+if (n == 0)
+{
+	weight = 0;
+	sign = NUMERIC_POS;
+}
 if (NUMERIC_CAN_BE_SHORT(var->dscale, weight))
 {
 	// 长度计算，整个numric的存储长度
 	// #define VARHDRSZ ((int32) sizeof(int32))
 	// #define NUMERIC_HDRSZ_SHORT (VARHDRSZ + sizeof(uint16))
 	// NUMERIC_HDRSZ_SHORT： (((int32) sizeof(int32)) + sizeof(uint16))
+	// n的值为ndigits
+	// typedef int16 NumericDigit;
+	// len = (((int32) sizeof(int32)) + sizeof(uint16)) + ndigits * sizeof(int16)
 	len = NUMERIC_HDRSZ_SHORT + n * sizeof(NumericDigit);
 	result = (Numeric) palloc(len);
 	// SET_VARSIZE： ( ((varattrib_4b *) (PTR))->va_4byte.va_header = (((uint32) (len)) << 2))
