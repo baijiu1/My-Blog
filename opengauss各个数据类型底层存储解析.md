@@ -95,6 +95,9 @@ typedef union
 if (NUMERIC_CAN_BE_SHORT(var->dscale, weight))
 {
 	// 长度计算，整个numric的存储长度
+	// #define VARHDRSZ ((int32) sizeof(int32))
+	// #define NUMERIC_HDRSZ_SHORT (VARHDRSZ + sizeof(uint16))
+	// NUMERIC_HDRSZ_SHORT： (((int32) sizeof(int32)) + sizeof(uint16))
 	len = NUMERIC_HDRSZ_SHORT + n * sizeof(NumericDigit);
 	result = (Numeric) palloc(len);
 	// SET_VARSIZE： ( ((varattrib_4b *) (PTR))->va_4byte.va_header = (((uint32) (len)) << 2))
