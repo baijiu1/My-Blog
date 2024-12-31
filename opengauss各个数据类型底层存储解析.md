@@ -241,6 +241,38 @@ SET_VARSIZE_SHORT(data, data_length);
 PG_GETARG_NUMERIC：这是比较重要的一个部分，负责判断传入的数值是否为short类型，还是long类型，是否是压缩还是非压缩
 
 ```c++
+Datum
+numeric_out(PG_FUNCTION_ARGS)
+{
+	Numeric		num = PG_GETARG_NUMERIC(0);
+	NumericVar	x;
+	char	   *str;
+
+	/*
+	 * Handle NaN and infinities
+	 */
+	if (NUMERIC_IS_SPECIAL(num))
+	{
+		if (NUMERIC_IS_PINF(num))
+			PG_RETURN_CSTRING(pstrdup("Infinity"));
+		else if (NUMERIC_IS_NINF(num))
+			PG_RETURN_CSTRING(pstrdup("-Infinity"));
+		else
+			PG_RETURN_CSTRING(pstrdup("NaN"));
+	}
+
+	/*
+	 * Get the number in the variable format.
+	 */
+	init_var_from_num(num, &x);
+
+	str = get_str_from_var(&x);
+
+	PG_RETURN_CSTRING(str);
+}
+```
+
+```c++
 struct varlena *
 pg_detoast_datum(struct varlena *datum)
 {
@@ -252,6 +284,7 @@ pg_detoast_datum(struct varlena *datum)
 }
 
 // 总体来说，这个函数就是判断传入的numeric是不是short还是long，是压缩还是非压缩，是外部存储还是直接存储。都是通过判断va_header来判断的，也就是物理文件的第一个字节
+// 这里会计算好va_header的值
 struct varlena *
 detoast_attr(struct varlena *attr)
 {
@@ -317,12 +350,17 @@ detoast_attr(struct varlena *attr)
 		/*
 		 * This is a short-header varlena --- convert to 4-byte header format
 		 */
+		// 如果是short类型，这里通过物理存储的第一个字节来计算va_header的值，后面计算ndigits的值会用到
+		// size data_size = ((((varattrib_1b *) (attr))->va_header >> 1) & 0x7F) - __builtin_offsetof(varattrib_1b, va_data)
+		// __builtin_offsetof(varattrib_1b, va_data)取的是va_data的偏移量，因为varattrib_1b的header恒定是uint8_t，所以就是一个字节，值也就是1
 		Size		data_size = VARSIZE_SHORT(attr) - VARHDRSZ_SHORT;
+		// size new_size = data_size + ((int32) sizeof(int32))
+		// ((int32) sizeof(int32))因为是int32，所以就是4个字节
 		Size		new_size = data_size + VARHDRSZ;
 		struct varlena *new_attr;
 
 		new_attr = (struct varlena *) palloc(new_size);
-		// 强制准换为varattrib_4b类型
+		// 这里计算va_header的值，扩展为：(((varattrib_4b *) (new_attr))->va_4byte.va_header = (((uint32) (new_size)) << 2))
 		SET_VARSIZE(new_attr, new_size);
 		memcpy(VARDATA(new_attr), VARDATA_SHORT(attr), data_size);
 		attr = new_attr;
@@ -332,37 +370,41 @@ detoast_attr(struct varlena *attr)
 }
 ```
 
+这里会计算numeric的各个部分，如ndigits、weight、sign等等
+
 ```c++
-Datum
-numeric_out(PG_FUNCTION_ARGS)
+static void
+init_var_from_num(Numeric num, NumericVar *dest)
 {
-	Numeric		num = PG_GETARG_NUMERIC(0);
-	NumericVar	x;
-	char	   *str;
-
-	/*
-	 * Handle NaN and infinities
-	 */
-	if (NUMERIC_IS_SPECIAL(num))
-	{
-		if (NUMERIC_IS_PINF(num))
-			PG_RETURN_CSTRING(pstrdup("Infinity"));
-		else if (NUMERIC_IS_NINF(num))
-			PG_RETURN_CSTRING(pstrdup("-Infinity"));
-		else
-			PG_RETURN_CSTRING(pstrdup("NaN"));
-	}
-
-	/*
-	 * Get the number in the variable format.
-	 */
-	init_var_from_num(num, &x);
-
-	str = get_str_from_var(&x);
-
-	PG_RETURN_CSTRING(str);
+	dest->ndigits = NUMERIC_NDIGITS(num);
+	dest->weight = NUMERIC_WEIGHT(num);
+	dest->sign = NUMERIC_SIGN(num);
+	dest->dscale = NUMERIC_DSCALE(num);
+	dest->digits = NUMERIC_DIGITS(num);
+	dest->buf = NULL;			/* digits array is not palloc'd */
 }
+
+具体计算方式为：
+ndigits：
+((((((varattrib_4b *) (num))->va_4byte.va_header >> 2) & 0x3FFFFFFF) - (((int32) sizeof(int32)) + sizeof(uint16) + ((((num)->choice.n_header & 0x8000) != 0) ? 0 : sizeof(int16)))) / sizeof(NumericDigit))
+va_header就是上面计算得出的数值，代入进去就可以计算出ndigits的值，也就是数组元素的个数
+
+weight：
+(((((num))->choice.n_header & 0x8000) != 0) ? (((num)->choice.n_short.n_header & 0x0040 ? ~0x003F : 0) | ((num)->choice.n_short.n_header & 0x003F)) : ((num)->choice.n_long.n_weight))
+n_header是标志位，对于short格式来说，就是第二个和第三个字节的内容，转换小端序后代入到上面公式里，下面的n_header都是一样的
+
+sign：
+((((num)->choice.n_header & 0xC000) == 0x8000) ? (((num)->choice.n_short.n_header & 0x2000) ? 0x4000 : 0x0000) : ((((num)->choice.n_header & 0xC000) == 0xC000) ? ((num)->choice.n_header & 0xF000) : ((num)->choice.n_header & 0xC000)))
+
+dscale：
+(((((num))->choice.n_header & 0x8000) != 0) ? ((num)->choice.n_short.n_header & 0x1F80) >> 7 : ((num)->choice.n_long.n_sign_dscale & 0x3FFF))
+
+digits：
+((((num)->choice.n_header & 0x8000) != 0) ? (num)->choice.n_short.n_data : (num)->choice.n_long.n_data)
+
 ```
+
+
 
 
 ### float4
