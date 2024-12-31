@@ -235,6 +235,135 @@ SET_VARSIZE_SHORT(data, data_length);
 (((varattrib_1b *) (data))->va_header = (((uint8) (9)) << 1) | 0x01) = 13
 ```
 
+###### numeric类型还原的过程
+函数位于numeric_out();这个函数就是还原numeric的过程。整体函数过程比较简单，调用了2个函数init_var_from_num()和get_str_from_var()。
+分别是init_var_from_num负责解析ndigits，weight，dscale等等。get_str_from_var负责转换为string
+PG_GETARG_NUMERIC：这是比较重要的一个部分，负责判断传入的数值是否为short类型，还是long类型，是否是压缩还是非压缩
+
+```c++
+struct varlena *
+pg_detoast_datum(struct varlena *datum)
+{
+	// 如果判断不是4B_e类型的话，执行detoast_attr函数
+	if (VARATT_IS_EXTENDED(datum))
+		return detoast_attr(datum);
+	else
+		return datum;
+}
+
+// 总体来说，这个函数就是判断传入的numeric是不是short还是long，是压缩还是非压缩，是外部存储还是直接存储。都是通过判断va_header来判断的，也就是物理文件的第一个字节
+struct varlena *
+detoast_attr(struct varlena *attr)
+{
+	if (VARATT_IS_EXTERNAL_ONDISK(attr))
+	{
+		/*
+		 * This is an externally stored datum --- fetch it back from there
+		 */
+		attr = toast_fetch_datum(attr);
+		/* If it's compressed, decompress it */
+		if (VARATT_IS_COMPRESSED(attr))
+		{
+			struct varlena *tmp = attr;
+
+			attr = toast_decompress_datum(tmp);
+			pfree(tmp);
+		}
+	}
+	else if (VARATT_IS_EXTERNAL_INDIRECT(attr))
+	{
+		/*
+		 * This is an indirect pointer --- dereference it
+		 */
+		struct varatt_indirect redirect;
+
+		VARATT_EXTERNAL_GET_POINTER(redirect, attr);
+		attr = (struct varlena *) redirect.pointer;
+
+		/* nested indirect Datums aren't allowed */
+		Assert(!VARATT_IS_EXTERNAL_INDIRECT(attr));
+
+		/* recurse in case value is still extended in some other way */
+		attr = detoast_attr(attr);
+
+		/* if it isn't, we'd better copy it */
+		if (attr == (struct varlena *) redirect.pointer)
+		{
+			struct varlena *result;
+
+			result = (struct varlena *) palloc(VARSIZE_ANY(attr));
+			memcpy(result, attr, VARSIZE_ANY(attr));
+			attr = result;
+		}
+	}
+	else if (VARATT_IS_EXTERNAL_EXPANDED(attr))
+	{
+		/*
+		 * This is an expanded-object pointer --- get flat format
+		 */
+		attr = detoast_external_attr(attr);
+		/* flatteners are not allowed to produce compressed/short output */
+		Assert(!VARATT_IS_EXTENDED(attr));
+	}
+	else if (VARATT_IS_COMPRESSED(attr))
+	{
+		/*
+		 * This is a compressed value inside of the main tuple
+		 */
+		attr = toast_decompress_datum(attr);
+	}
+	else if (VARATT_IS_SHORT(attr))
+	{
+		/*
+		 * This is a short-header varlena --- convert to 4-byte header format
+		 */
+		Size		data_size = VARSIZE_SHORT(attr) - VARHDRSZ_SHORT;
+		Size		new_size = data_size + VARHDRSZ;
+		struct varlena *new_attr;
+
+		new_attr = (struct varlena *) palloc(new_size);
+		// 强制准换为varattrib_4b类型
+		SET_VARSIZE(new_attr, new_size);
+		memcpy(VARDATA(new_attr), VARDATA_SHORT(attr), data_size);
+		attr = new_attr;
+	}
+
+	return attr;
+}
+```
+
+```c++
+Datum
+numeric_out(PG_FUNCTION_ARGS)
+{
+	Numeric		num = PG_GETARG_NUMERIC(0);
+	NumericVar	x;
+	char	   *str;
+
+	/*
+	 * Handle NaN and infinities
+	 */
+	if (NUMERIC_IS_SPECIAL(num))
+	{
+		if (NUMERIC_IS_PINF(num))
+			PG_RETURN_CSTRING(pstrdup("Infinity"));
+		else if (NUMERIC_IS_NINF(num))
+			PG_RETURN_CSTRING(pstrdup("-Infinity"));
+		else
+			PG_RETURN_CSTRING(pstrdup("NaN"));
+	}
+
+	/*
+	 * Get the number in the variable format.
+	 */
+	init_var_from_num(num, &x);
+
+	str = get_str_from_var(&x);
+
+	PG_RETURN_CSTRING(str);
+}
+```
+
 
 ### float4
 
