@@ -273,6 +273,17 @@ numeric_out(PG_FUNCTION_ARGS)
 ```
 
 ```c++
+// numeric_out()函数调用了Numeric		num = PG_GETARG_NUMERIC(0);，以下是调用过程
+#define PG_GETARG_NUMERIC(n)	  DatumGetNumeric(PG_GETARG_DATUM(n))
+static inline Numeric
+DatumGetNumeric(Datum X)
+{
+	// 返回一个Numeric类型的变量
+	return (Numeric) PG_DETOAST_DATUM(X);
+}
+
+#define PG_DETOAST_DATUM(datum) \
+	pg_detoast_datum((struct varlena *) DatumGetPointer(datum))
 struct varlena *
 pg_detoast_datum(struct varlena *datum)
 {
