@@ -276,7 +276,8 @@ numeric_out(PG_FUNCTION_ARGS)
 struct varlena *
 pg_detoast_datum(struct varlena *datum)
 {
-	// 如果判断不是4B_e类型的话，执行detoast_attr函数
+	// 如果判断不是4B_U类型的话，执行detoast_attr函数。否则的话，就直接返回前4个字节，按小端序排序
+	// VARATT_IS_EXTENDED: (!VARATT_IS_4B_U(PTR)) 
 	if (VARATT_IS_EXTENDED(datum))
 		return detoast_attr(datum);
 	else
